@@ -34,3 +34,6 @@ go.work.sum
 # Built CLI binary
 /pgopt
 
+# Local developer notes, not intended for the repository.
+CLAUDE.md
+
