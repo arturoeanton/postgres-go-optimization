@@ -1,0 +1,8 @@
+{
+  "id": "js_limit_without_order_by",
+  "description": "LIMIT without ORDER BY produces a non-deterministic slice of the result set",
+  "severity": "warn",
+  "requiresSchema": false,
+  "requiresExplain": false,
+  "evidence": "src/backend/executor/nodeLimit.c"
+}

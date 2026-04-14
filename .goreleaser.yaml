@@ -1,0 +1,45 @@
+version: 2
+
+project_name: pgopt
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: pgopt
+    main: ./cmd/pgopt
+    binary: pgopt
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+      - -X main.Commit={{.ShortCommit}}
+      - -X main.Date={{.Date}}
+
+archives:
+  - id: pgopt
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+      - README.es.md
+      - CHANGELOG.md
+      - docs/**/*
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  disable: true
+
+release:
+  draft: true
+  prerelease: auto

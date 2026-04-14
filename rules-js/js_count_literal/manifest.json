@@ -1,0 +1,8 @@
+{
+  "id": "js_count_literal",
+  "description": "COUNT(1) and COUNT('x') are equivalent to COUNT(*) but obscure intent",
+  "severity": "info",
+  "requiresSchema": false,
+  "requiresExplain": false,
+  "evidence": "src/backend/parser/parse_func.c:ParseFuncOrColumn"
+}

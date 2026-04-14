@@ -1,0 +1,137 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: test / ${{ matrix.os }} / go ${{ matrix.go }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        go: ['1.22', '1.23']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go build
+        run: go build ./...
+
+      - name: go test (race)
+        run: go test -race -count=1 ./...
+
+  fixtures:
+    name: fixtures / end-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: build pgopt
+        run: go build -o pgopt ./cmd/pgopt
+
+      - name: run on every bad fixture (Go rules)
+        run: |
+          for f in testdata/bad/*.sql; do
+            expected=$(head -1 "$f" | sed -n 's/^-- expect: //p')
+            [ -z "$expected" ] && continue
+            ./pgopt --format json "$f" | grep -q "\"rule\": *\"$expected\"" \
+              || { echo "::error file=$f::rule $expected did not fire"; exit 1; }
+          done
+
+      - name: run on every bad fixture (JS rules)
+        run: |
+          for f in testdata/bad-js/*.sql; do
+            expected=$(head -1 "$f" | sed -n 's/^-- expect: //p')
+            [ -z "$expected" ] && continue
+            ./pgopt --js-rules --format json "$f" | grep -q "\"rule\": *\"$expected\"" \
+              || { echo "::error file=$f::rule $expected did not fire"; exit 1; }
+          done
+
+  integration:
+    name: integration / live postgres
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: ['17']
+    services:
+      postgres:
+        image: postgres:${{ matrix.pg }}
+        env:
+          POSTGRES_USER: pgopt
+          POSTGRES_PASSWORD: pgopt
+          POSTGRES_DB: pgopt
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pgopt -d pgopt"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: build pgopt
+        run: go build -o pgopt ./cmd/pgopt
+
+      - name: install postgres client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: seed schema
+        env:
+          PGPASSWORD: pgopt
+        run: |
+          psql -h 127.0.0.1 -U pgopt -d pgopt -f docker/init.sql
+          psql -h 127.0.0.1 -U pgopt -d pgopt -f docker/seed.sql
+
+      - name: schema-aware rules against live PG
+        env:
+          PGOPT_DB: postgres://pgopt:pgopt@127.0.0.1:5432/pgopt?sslmode=disable
+        run: |
+          set -eu
+          # Touch each schema-aware rule with a demo query and confirm
+          # pgopt exits 0 or 1 (not 2/3) — i.e., it parsed and ran.
+          for demo in testdata/demo/*.sql; do
+            echo "::group::$demo"
+            ./pgopt --db "$PGOPT_DB" --verbose "$demo" || status=$?
+            status=${status:-0}
+            if [ "$status" -ge 2 ]; then
+              echo "::error file=$demo::pgopt failed with exit $status"
+              exit "$status"
+            fi
+            echo "::endgroup::"
+          done
+
+      - name: EXPLAIN-based rules against live PG
+        env:
+          PGOPT_DB: postgres://pgopt:pgopt@127.0.0.1:5432/pgopt?sslmode=disable
+        run: |
+          set -eu
+          ./pgopt --db "$PGOPT_DB" --explain --verbose testdata/demo/bad_query_1.sql || status=$?
+          status=${status:-0}
+          if [ "$status" -ge 2 ]; then
+            echo "::error ::EXPLAIN integration failed with exit $status"
+            exit "$status"
+          fi

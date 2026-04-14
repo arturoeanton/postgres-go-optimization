@@ -1,0 +1,8 @@
+{
+  "id": "js_string_concat_in_where",
+  "description": "String concatenation on a column inside WHERE defeats btree index usage",
+  "severity": "warn",
+  "requiresSchema": false,
+  "requiresExplain": false,
+  "evidence": "src/backend/optimizer/path/indxpath.c:match_clause_to_indexcol"
+}

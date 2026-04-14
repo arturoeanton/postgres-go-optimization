@@ -1,0 +1,8 @@
+{
+  "id": "js_distinct_in_exists",
+  "description": "DISTINCT inside an EXISTS or IN subquery is discarded by the planner",
+  "severity": "info",
+  "requiresSchema": false,
+  "requiresExplain": false,
+  "evidence": "src/backend/optimizer/plan/subselect.c:convert_EXISTS_sublink_to_join"
+}
